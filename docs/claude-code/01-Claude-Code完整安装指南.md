@@ -330,7 +330,7 @@ ping api.anthropic.com
 
 | 操作系统   | 安装位置                          |
 | ---------- | --------------------------------- |
-| Windows    | `C:\Users\你的用户名\AppData\Local\claude-code\` |
+| Windows    | `C:\Users\你的用户名\.local\bin\` |
 | macOS/Linux | `~/.local/bin/claude`             |
 
 ### 3.3 自动更新机制
@@ -764,19 +764,13 @@ irm https://claude.ai/install.ps1 | iex
 ```
 [PowerShell显示]
 Downloading Claude Code...
-Installing to C:\Users\你的用户名\AppData\Local\claude-code\
+Installing to C:\Users\你的用户名\.local\bin\
 ✓ Installation complete!
-✓ Added to PATH
 
 Run 'claude --version' to verify.
 ```
 
-**验证安装：**
-
-```powershell
-claude --version
-# 预期输出：Claude Code v2.1.x (native)
-```
+> ⚠️ **重要提醒**：PowerShell 脚本安装完成后，**不会自动配置 PATH 环境变量**！你需要手动配置 PATH 才能在终端中直接使用 `claude` 命令。请继续阅读下方的 **PATH 环境变量配置** 章节。
 
 ---
 
@@ -869,7 +863,59 @@ npm install -g @anthropic-ai/claude-code
 
 ---
 
-### 5.6 验证安装成功
+### 5.6 配置 PATH 环境变量（Windows 必读）
+
+> 💡 **为什么需要配置 PATH？** Claude Code 通过 PowerShell 脚本安装后，可执行文件位于 `C:\Users\你的用户名\.local\bin\`，但该目录可能不在系统的 PATH 环境变量中。不配置 PATH，终端就找不到 `claude` 命令，会报 `'claude' 不是内部或外部命令` 的错误。
+
+#### 方法1：PowerShell 命令配置（推荐）
+
+```powershell
+# 将 Claude Code 安装目录添加到用户 PATH 环境变量
+[System.Environment]::SetEnvironmentVariable(
+    'Path',
+    [System.Environment]::GetEnvironmentVariable('Path', 'User') + ';' + "$env:USERPROFILE\.local\bin",
+    'User'
+)
+```
+
+> ⚠️ 配置完成后，**必须重启 PowerShell / CMD 窗口**才能生效！
+
+**验证 PATH 是否配置成功：**
+
+```powershell
+# 重启终端后执行
+claude --version
+# 如果显示版本号（如 Claude Code v2.1.x (native)），说明配置成功
+```
+
+#### 方法2：通过系统设置（图形界面）
+
+1. 按下 `Win + R` 打开"运行"对话框
+2. 输入 `sysdm.cpl`，按回车，打开"系统属性"
+3. 点击 **"高级"** 选项卡
+4. 点击底部的 **"环境变量"** 按钮
+5. 在 **"用户变量"** 区域找到 `Path`，双击编辑
+6. 点击 **"新建"**，添加：`%USERPROFILE%\.local\bin`
+7. 点击 **"确定"** 保存所有对话框
+8. **重启所有终端窗口**
+
+#### macOS / Linux 用户
+
+脚本安装通常会自动将 `~/.local/bin` 添加到 PATH。如果安装后 `claude` 命令不可用，手动添加：
+
+```bash
+# 添加到 shell 配置文件（zsh 用户）
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+# bash 用户
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+---
+
+### 5.7 验证安装成功
 
 **无论用哪种方式，安装完成后验证：**
 
@@ -894,27 +940,41 @@ which claude     # macOS/Linux
 
 ---
 
-### 5.7 安装失败排查
+### 5.8 安装失败排查
 
-#### 问题1：命令找不到
+#### 问题1：检查 PATH 环境变量配置是否正确
 
 ```
 claude: command not found
+# 或 Windows 上的：
+'claude' 不是内部或外部命令
 ```
 
-**原因**：PATH环境变量未更新
+**原因**：PATH 环境变量未包含 Claude Code 安装目录
 
-**解决方案：**
+**排查步骤：**
 
-```bash
-# macOS/Linux: 重新加载配置
-source ~/.zshrc   # 或 source ~/.bashrc
+```powershell
+# 第一步：确认 claude 可执行文件存在
+# Windows:
+Test-Path "$env:USERPROFILE\.local\bin\claude.exe"
+# 如果返回 True，说明安装成功，只是 PATH 没配
 
-# Windows: 重启PowerShell或CMD
-# 或者手动添加到PATH：
-# macOS/Linux: ~/.local/bin
-# Windows: C:\Users\你的用户名\AppData\Local\claude-code\bin
+# macOS/Linux:
+ls ~/.local/bin/claude
 ```
+
+```powershell
+# 第二步：检查 PATH 是否包含安装目录
+# Windows:
+$env:Path -split ';' | Select-String '.local'
+# 如果没有输出，说明 PATH 未配置
+
+# macOS/Linux:
+echo $PATH | tr ':' '\n' | grep '.local'
+```
+
+**解决方案：** 按照上方 **5.6 配置 PATH 环境变量** 章节进行配置，然后**重启终端窗口**。
 
 #### 问题2：权限被拒绝
 
@@ -963,7 +1023,7 @@ Windows已保护你的电脑
 
 ---
 
-### 5.8 卸载 Claude Code
+### 5.9 卸载 Claude Code
 
 **如果你需要卸载：**
 
@@ -980,11 +1040,14 @@ rm -rf ~/.claude
 **Windows:**
 
 ```powershell
-# 删除安装目录
-Remove-Item -Recurse -Force $env:LOCALAPPDATA\claude-code
+# 删除可执行文件
+Remove-Item -Force "$env:USERPROFILE\.local\bin\claude.exe"
 
-# 删除配置（可选）
-Remove-Item -Recurse -Force ~/.claude
+# 删除配置和数据（可选）
+Remove-Item -Recurse -Force "$env:USERPROFILE\.claude"
+
+# 从 PATH 中移除安装目录（可选）
+# 通过 系统属性 → 环境变量 → 用户变量 Path → 删除 %USERPROFILE%\.local\bin
 ```
 
 **Homebrew卸载：**
@@ -1957,9 +2020,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 # 原因：Windows Defender将claude.exe识别为潜在威胁
 
 # 解决方案
-# 1. 添加claude-code目录到排除列表
+# 1. 添加 Claude Code 安装目录到排除列表
 #    Windows安全 → 病毒和威胁防护 → 排除项
-#    添加：C:\Users\<用户名>\AppData\Local\claude-code
+#    添加：C:\Users\<用户名>\.local\bin
 
 # 2. 临时禁用实时保护（不推荐）
 ```
@@ -1978,7 +2041,7 @@ claude: The term 'claude' is not recognized as a name of a cmdlet
 **解决方案（手动添加 PATH 环境变量）：**
 
 Claude Code 原生安装后，可执行文件通常位于以下路径：
-- **原生安装**：`C:\Users\<你的用户名>\AppData\Local\claude-code\`
+- **原生安装**：`C:\Users\<你的用户名>\.local\bin\`
 - **NPM 安装**：`C:\Users\<你的用户名>\AppData\Roaming\npm\`
 
 **方法1：通过系统设置（图形界面，推荐新手用）**
@@ -1990,7 +2053,7 @@ Claude Code 原生安装后，可执行文件通常位于以下路径：
 5. 在 **"用户变量"** 区域（上半部分），找到名为 `Path` 的变量，双击它
 6. 在弹出的"编辑环境变量"窗口中，点击 **"新建"**
 7. 输入 Claude Code 的安装路径：
-   - 原生安装填：`%LOCALAPPDATA%\claude-code\`
+   - 原生安装填：`%USERPROFILE%\.local\bin`
    - NPM 安装填：`%APPDATA%\npm\`
 8. 点击 **"确定"** 保存所有对话框
 9. **关闭并重新打开所有终端窗口**（重要！已打开的终端不会自动刷新 PATH）
@@ -2003,7 +2066,7 @@ Claude Code 原生安装后，可执行文件通常位于以下路径：
 
 # 添加 Claude Code 到 PATH（原生安装路径）
 $currentPath = [System.Environment]::GetEnvironmentVariable('Path', 'User')
-$newPath = "$currentPath;$env:LOCALAPPDATA\claude-code"
+$newPath = "$currentPath;$env:USERPROFILE\.local\bin"
 [System.Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
 
 # 如果是 NPM 安装，改用这个路径
@@ -2692,11 +2755,11 @@ export HTTP_PROXY=http://127.0.0.1:7890
 
    ```powershell
    # 检查安装位置
-   ls $env:LOCALAPPDATA\claude-code
+   Test-Path "$env:USERPROFILE\.local\bin\claude.exe"
 
-   # 如果存在，手动添加到PATH
-   # 系统设置 → 环境变量 → 用户变量的Path → 添加：
-   # C:\Users\你的用户名\AppData\Local\claude-code\bin
+   # 如果返回 True，手动添加到 PATH
+   # 系统设置 → 环境变量 → 用户变量的 Path → 添加：
+   # %USERPROFILE%\.local\bin
    ```
 
 3. 如果确实没安装：
@@ -2780,7 +2843,7 @@ npm uninstall -g @anthropic-ai/claude-code
 
 **A23：大约100-200MB。**
 
-- Windows: `~150MB` 在 `C:\Users\你的用户名\AppData\Local\claude-code\`
+- Windows: `~150MB` 在 `C:\Users\你的用户名\.local\bin\`
 - macOS/Linux: `~100MB` 在 `~/.local/bin/` 和 `~/.claude/`
 
 相比npm安装节省约50%空间。

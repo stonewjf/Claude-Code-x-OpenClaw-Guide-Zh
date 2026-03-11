@@ -110,7 +110,7 @@
 | **Decision** | - | PreToolUse Hook的返回决策 | 安检结果（放行/拦截/询问） |
 | **stdin** | Standard Input | 标准输入，Hook接收数据的方式 | 传送带送入检查口 |
 | **stdout** | Standard Output | 标准输出，Hook返回结果的方式 | 检查结果显示屏 |
-| **stderr** | Standard Error | 标准错误输出，用于日志 | 后台监控日志 |
+| **stderr** | Standard Error | 标准错误输出，仅用于调试日志（不会显示在Claude Code界面） | 后台监控日志（用户看不到） |
 | **timeout** | - | 超时时间，Hook最长运行时间 | 限时检查（超时自动放行） |
 | **JSON** | JavaScript Object Notation | 一种通用的数据格式，用花括号`{}`组织数据，settings.json配置文件就是JSON格式 | 标准化的表格模板 |
 | **`~`（波浪号）** | Home Directory | 用户的"家目录"，macOS是`/Users/用户名`，Linux是`/home/用户名`，Windows对应`C:\Users\用户名` | 你电脑上"我的文档"的上级目录 |
@@ -366,10 +366,12 @@ ls .claude/hooks
 #!/usr/bin/env python3
 """
 最简单的PostToolUse Hook示例
-每次Write工具执行后打印一条消息
+每次Write工具执行后记录日志
 """
 import sys
 import json
+from pathlib import Path
+from datetime import datetime
 
 # 从stdin读取工具执行信息
 try:
@@ -384,11 +386,15 @@ file_path = tool_input.get('file_path', '')
 
 # 只处理Write工具
 if tool_name == 'Write':
-    # 打印到stderr（会显示在Claude Code界面）
-    print(f"\n{'='*50}", file=sys.stderr)
-    print(f"✅ Hook触发成功！", file=sys.stderr)
-    print(f"📄 文件已保存: {file_path}", file=sys.stderr)
-    print(f"{'='*50}\n", file=sys.stderr)
+    # PostToolUse Hook执行后处理任务
+    # 注意：PostToolUse Hook无法向用户输出信息
+    # Claude Code只会显示"Hook执行成功"
+    # 如果需要调试，可以写入日志文件
+    log_file = Path.home() / '.claude' / 'hooks' / 'post-write.log'
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_file, 'a', encoding='utf-8') as f:
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        f.write(f"[{timestamp}] ✅ 文件已保存: {file_path}\n")
 
 sys.exit(0)
 '@ | Out-File -FilePath ".claude\hooks\post-write-hello.py" -Encoding utf8
@@ -400,10 +406,12 @@ cat > .claude/hooks/post-write-hello.py << 'EOF'
 #!/usr/bin/env python3
 """
 最简单的PostToolUse Hook示例
-每次Write工具执行后打印一条消息
+每次Write工具执行后记录日志
 """
 import sys
 import json
+from pathlib import Path
+from datetime import datetime
 
 # 从stdin读取工具执行信息
 try:
@@ -418,11 +426,17 @@ file_path = tool_input.get('file_path', '')
 
 # 只处理Write工具
 if tool_name == 'Write':
-    # 打印到stderr（会显示在Claude Code界面）
-    print(f"\n{'='*50}", file=sys.stderr)
-    print(f"✅ Hook触发成功！", file=sys.stderr)
-    print(f"📄 文件已保存: {file_path}", file=sys.stderr)
-    print(f"{'='*50}\n", file=sys.stderr)
+    # PostToolUse Hook执行后处理任务
+    # 注意：PostToolUse Hook无法向用户输出信息
+    # Claude Code只会显示"Hook执行成功"
+    # 如果需要调试，可以写入日志文件
+    log_file = Path.home() / '.claude' / 'hooks' / 'post-write.log'
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_file, 'a', encoding='utf-8') as f:
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        f.write(f"[{timestamp}] ✅ 文件已保存: {file_path}\n")
+
+sys.exit(0)
 
 sys.exit(0)
 EOF
@@ -531,13 +545,19 @@ Claude：我来帮你创建test.txt文件。
 
 [Write工具执行]
 
-==================================================
-✅ Hook触发成功！
-📄 文件已保存: /你的项目路径/test.txt
-==================================================
+✅ Hook执行成功
 
 文件已创建成功！
 ```
+
+> 💡 **重要说明**：
+> - PostToolUse Hook执行后，Claude Code只会显示"Hook执行成功"
+> - Hook的日志已写入`~/.claude/hooks/post-write.log`文件
+> - 你可以查看日志文件确认Hook确实执行了：
+>   ```bash
+>   cat ~/.claude/hooks/post-write.log
+>   # 应该看到类似：[2026-03-05 16:30:00] ✅ 文件已保存: /path/to/test.txt
+>   ```
 
 > ✅ **关键确认**：看到 `Hook触发成功！` 说明Hook配置正确并成功执行！
 
@@ -857,9 +877,19 @@ sys.exit(0)
 
 #### 输出格式
 
+> ⚠️ **重要：PostToolUse Hook的输出机制**
+>
+> PostToolUse Hook**无法向用户输出信息**！
+>
+> - ✅ **可以做**：执行后处理任务（格式化、备份、测试、写日志文件）
+> - ❌ **不能做**：向用户显示信息（Claude Code只会显示"Hook执行成功/失败"）
+> - ❌ **常见误区**：`print(..., file=sys.stderr)`不会显示在界面，只在终端可见
+>
+> 如果需要向用户输出信息，请使用**UserPromptSubmit Hook**的`additionalContext`机制。
+
 PostToolUse Hook**不返回决策**（工具已经执行完了），只能：
 - 执行后处理任务（格式化、备份、测试）
-- 打印日志到stderr（显示在Claude Code界面）
+- 写入日志文件（用于调试）
 
 #### 完整示例1：自动代码格式化
 
@@ -1161,8 +1191,8 @@ sys.exit(0)
 > 💡 **注意**：
 > - 输入是JSON，必须用`json.loads()`解析
 > - 用户原始输入在`prompt`字段中
-> - stdout输出会作为额外上下文注入给Claude
-> - stderr输出会显示在Claude Code界面
+> - 通过stdout输出JSON格式的`additionalContext`字段来注入上下文
+> - stderr仅用于调试，不会显示在Claude Code界面
 
 **配置**：
 
@@ -2455,11 +2485,50 @@ input_data = json.loads(sys.stdin.read())
 tool_name = input_data.get('tool_name')
 ```
 
-**Q12: 如何输出日志到Claude Code界面？**
+**Q12: 如何在Hook中向用户输出信息？**
 
-使用stderr：
+**重要**：不同Hook类型的输出机制不同！
+
+**PostToolUse Hook**：无法直接输出给用户
+- Claude Code只会显示"Hook执行成功/失败"
+- 如需调试，写入日志文件：
 ```python
-print("日志信息", file=sys.stderr)
+from pathlib import Path
+log_file = Path.home() / '.claude' / 'hooks' / 'debug.log'
+with open(log_file, 'a') as f:
+    f.write(f"调试信息\n")
+```
+
+**UserPromptSubmit Hook**：通过stdout JSON的`additionalContext`字段
+```python
+import json
+output = {
+    "hookSpecificOutput": {
+        "hookEventName": "UserPromptSubmit",
+        "additionalContext": "要显示给用户的内容"
+    }
+}
+print(json.dumps(output))
+```
+
+**PreToolUse Hook**：通过stdout JSON返回决策
+```python
+import json
+decision = {
+    "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": {
+            "decision": "deny",
+            "message": "拒绝原因（用户可见）"
+        }
+    }
+}
+print(json.dumps(decision))
+```
+
+**stderr输出**：仅用于调试，不会显示在Claude Code界面
+```python
+print("调试信息", file=sys.stderr)  # 只在终端可见，用户看不到
 ```
 
 **Q13: 如何返回决策（PreToolUse）？**
